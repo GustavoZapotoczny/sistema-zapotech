@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Zapotech.Api/Zapotech.Api.csproj" />
+    <Project Path="src/Zapotech.Dominio/Zapotech.Dominio.csproj" />
+    <Project Path="src/Zapotech.Infra/Zapotech.Infra.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Zapotech.Testes/Zapotech.Testes.csproj" />
+  </Folder>
+</Solution>
