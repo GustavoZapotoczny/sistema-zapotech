@@ -1,0 +1,144 @@
+# CI: roda a cada commit e em todo pull request.
+# Bloqueia se: teste falhar, pacote inicial do web passar de 250 KB gzip
+# ou o Lighthouse ficar abaixo das metas (plano-de-acao.md, seção 1).
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  backend:
+    name: Backend (build e testes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: backend/global.json
+      - name: Restaurar pacotes
+        run: dotnet restore
+      - name: Compilar
+        run: dotnet build --no-restore -c Release
+      - name: Testes (xUnit + Testcontainers)
+        run: dotnet test --no-build -c Release --logger "trx;LogFileName=resultados.trx" --results-directory ../resultados-testes
+      - name: Guardar resultados dos testes
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: resultados-testes-backend
+          path: resultados-testes
+          retention-days: 14
+
+  backend-docker:
+    name: Backend (imagem Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Construir imagem da API
+        run: docker build -t zapotech-api:ci backend
+      - name: Testar /saude dentro do contêiner
+        run: |
+          docker run -d --name api -p 8080:8080 zapotech-api:ci
+          for i in $(seq 1 30); do curl -fsS http://localhost:8080/saude && exit 0; sleep 1; done
+          docker logs api
+          exit 1
+
+  web:
+    name: Web (lint, testes, build e orçamento)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Verificar tipos
+        run: npm run typecheck
+      - name: Testes (Vitest)
+        run: npm test
+      - name: Build de produção
+        run: npm run build
+      - name: Orçamento de tamanho (máx. 250 KB gzip)
+        run: npm run orcamento
+      - name: Guardar build
+        uses: actions/upload-artifact@v5
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 7
+
+  lighthouse:
+    name: Web (Lighthouse no celular)
+    needs: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - uses: actions/download-artifact@v5
+        with:
+          name: web-dist
+          path: web/dist
+      - name: Lighthouse CI (LCP < 2,5 s, TBT < 200 ms, CLS < 0,1)
+        run: npm run lighthouse
+      - name: Guardar relatórios
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: relatorios-lighthouse
+          path: web/.lighthouseci/relatorios
+          retention-days: 14
+
+  mobile:
+    name: Mobile (tipos e testes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - name: Verificar tipos
+        run: npm run typecheck
+      - name: Testes (jest-expo)
+        run: npm test -- --ci
