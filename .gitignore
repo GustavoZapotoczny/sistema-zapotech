@@ -1,0 +1,33 @@
+# Segredos e variáveis locais
+.env
+.env.*
+!.env.example
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# Node / web / mobile
+node_modules/
+dist/
+coverage/
+.lighthouseci/
+*.tsbuildinfo
+
+# Expo
+.expo/
+web-build/
+expo-env.d.ts
+ios/
+android/
+
+# Editores e sistema
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
